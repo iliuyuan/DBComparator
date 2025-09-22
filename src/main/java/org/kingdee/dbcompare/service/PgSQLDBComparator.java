@@ -5,6 +5,8 @@ import org.kingdee.dbcompare.model.ColumnInfo;
 import org.kingdee.dbcompare.model.IndexInfo;
 import org.kingdee.dbcompare.model.SchemaDifference;
 import org.kingdee.dbcompare.model.TableInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.util.*;
@@ -15,6 +17,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * 以某个基准数据库的结构为标准，对比其他数据库的差异
  */
 public class PgSQLDBComparator {
+
+    private static final Logger logger = LoggerFactory.getLogger(PgSQLDBComparator.class);
 
     private DatabaseConfig baseDatabase;
     private List<DatabaseConfig> targetDatabases;
@@ -31,19 +35,19 @@ public class PgSQLDBComparator {
      * 执行数据库结构对比
      */
     public void compareSchemas() throws SQLException {
-        System.out.println("开始加载基准数据库结构: " + baseDatabase.getName());
+        logger.info("开始加载基准数据库结构: {} (Schema: {})", baseDatabase.getName(), baseDatabase.getSchema());
         baseSchema = loadDatabaseSchema(baseDatabase);
-        System.out.println("基准数据库加载完成，共 " + baseSchema.size() + " 个表");
+        logger.info("基准数据库加载完成，共 {} 个表", baseSchema.size());
 
         differences.clear();
 
         for (DatabaseConfig targetDb : targetDatabases) {
-            System.out.println("正在对比数据库: " + targetDb.getName());
+            logger.info("正在对比数据库: {} (Schema: {})", targetDb.getName(), targetDb.getSchema());
             Map<String, TableInfo> targetSchema = loadDatabaseSchema(targetDb);
             compareTwoSchemas(baseSchema, targetSchema, targetDb.getName());
         }
 
-        System.out.println("对比完成，共发现 " + differences.size() + " 个差异");
+        logger.info("对比完成，共发现 {} 个差异", differences.size());
     }
 
     /**
@@ -55,17 +59,19 @@ public class PgSQLDBComparator {
         try (Connection conn = DriverManager.getConnection(
                 dbConfig.getUrl(), dbConfig.getUsername(), dbConfig.getPassword())) {
 
+            logger.debug("连接数据库成功: {}, Schema: {}", dbConfig.getName(), dbConfig.getSchema());
+
             // 加载表信息
-            loadTables(conn, schema);
+            loadTables(conn, schema, dbConfig.getSchema());
 
             // 加载列信息
-            loadColumns(conn, schema);
+            loadColumns(conn, schema, dbConfig.getSchema());
 
             // 加载主键信息
-            loadPrimaryKeys(conn, schema);
+            loadPrimaryKeys(conn, schema, dbConfig.getSchema());
 
             // 加载索引信息
-            loadIndexes(conn, schema);
+            loadIndexes(conn, schema, dbConfig.getSchema());
         }
 
         return schema;
@@ -74,53 +80,62 @@ public class PgSQLDBComparator {
     /**
      * 加载表信息
      */
-    private void loadTables(Connection conn, Map<String, TableInfo> schema) throws SQLException {
+    private void loadTables(Connection conn, Map<String, TableInfo> schema, String schemaName) throws SQLException {
         String sql = "SELECT table_name, table_type " +
                 "FROM information_schema.tables " +
-                "WHERE table_schema = 'public' " +
+                "WHERE table_schema = ? " +
                 "ORDER BY table_name";
 
-        try (PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, schemaName);
 
-            while (rs.next()) {
-                String tableName = rs.getString("table_name");
-                String tableType = rs.getString("table_type");
-                schema.put(tableName, new TableInfo(tableName, tableType));
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    String tableName = rs.getString("table_name");
+                    String tableType = rs.getString("table_type");
+                    schema.put(tableName, new TableInfo(tableName, tableType));
+                }
             }
         }
+
+        logger.debug("从Schema '{}' 加载了 {} 个表", schemaName, schema.size());
     }
 
     /**
      * 加载列信息
      */
-    private void loadColumns(Connection conn, Map<String, TableInfo> schema) throws SQLException {
+    private void loadColumns(Connection conn, Map<String, TableInfo> schema, String schemaName) throws SQLException {
         String sql = "SELECT table_name, column_name, data_type, is_nullable, " +
                 "column_default, character_maximum_length, numeric_precision, numeric_scale " +
                 "FROM information_schema.columns " +
-                "WHERE table_schema = 'public' " +
+                "WHERE table_schema = ? " +
                 "ORDER BY table_name, ordinal_position";
 
-        try (PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, schemaName);
 
-            while (rs.next()) {
-                String tableName = rs.getString("table_name");
-                TableInfo tableInfo = schema.get(tableName);
-                if (tableInfo != null) {
-                    String columnName = rs.getString("column_name");
-                    String dataType = rs.getString("data_type");
-                    boolean nullable = "YES".equals(rs.getString("is_nullable"));
-                    String defaultValue = rs.getString("column_default");
-                    int charMaxLength = rs.getInt("character_maximum_length");
-                    int numericPrecision = rs.getInt("numeric_precision");
-                    int numericScale = rs.getInt("numeric_scale");
+            try (ResultSet rs = stmt.executeQuery()) {
+                int columnCount = 0;
+                while (rs.next()) {
+                    String tableName = rs.getString("table_name");
+                    TableInfo tableInfo = schema.get(tableName);
+                    if (tableInfo != null) {
+                        String columnName = rs.getString("column_name");
+                        String dataType = rs.getString("data_type");
+                        boolean nullable = "YES".equals(rs.getString("is_nullable"));
+                        String defaultValue = rs.getString("column_default");
+                        int charMaxLength = rs.getInt("character_maximum_length");
+                        int numericPrecision = rs.getInt("numeric_precision");
+                        int numericScale = rs.getInt("numeric_scale");
 
-                    ColumnInfo columnInfo = new ColumnInfo(columnName, dataType, nullable,
-                            defaultValue, charMaxLength, numericPrecision, numericScale);
+                        ColumnInfo columnInfo = new ColumnInfo(columnName, dataType, nullable,
+                                defaultValue, charMaxLength, numericPrecision, numericScale);
 
-                    tableInfo.getColumns().put(columnName, columnInfo);
+                        tableInfo.getColumns().put(columnName, columnInfo);
+                        columnCount++;
+                    }
                 }
+                logger.debug("从Schema '{}' 加载了 {} 个列", schemaName, columnCount);
             }
         }
     }
@@ -128,26 +143,31 @@ public class PgSQLDBComparator {
     /**
      * 加载主键信息
      */
-    private void loadPrimaryKeys(Connection conn, Map<String, TableInfo> schema) throws SQLException {
+    private void loadPrimaryKeys(Connection conn, Map<String, TableInfo> schema, String schemaName) throws SQLException {
         String sql = "SELECT tc.table_name, kcu.column_name " +
                 "FROM information_schema.table_constraints tc " +
                 "JOIN information_schema.key_column_usage kcu " +
                 "ON tc.constraint_name = kcu.constraint_name " +
                 "WHERE tc.constraint_type = 'PRIMARY KEY' " +
-                "AND tc.table_schema = 'public' " +
+                "AND tc.table_schema = ? " +
                 "ORDER BY tc.table_name, kcu.ordinal_position";
 
-        try (PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, schemaName);
 
-            while (rs.next()) {
-                String tableName = rs.getString("table_name");
-                String columnName = rs.getString("column_name");
+            try (ResultSet rs = stmt.executeQuery()) {
+                int pkCount = 0;
+                while (rs.next()) {
+                    String tableName = rs.getString("table_name");
+                    String columnName = rs.getString("column_name");
 
-                TableInfo tableInfo = schema.get(tableName);
-                if (tableInfo != null) {
-                    tableInfo.getPrimaryKeys().add(columnName);
+                    TableInfo tableInfo = schema.get(tableName);
+                    if (tableInfo != null) {
+                        tableInfo.getPrimaryKeys().add(columnName);
+                        pkCount++;
+                    }
                 }
+                logger.debug("从Schema '{}' 加载了 {} 个主键列", schemaName, pkCount);
             }
         }
     }
@@ -155,34 +175,39 @@ public class PgSQLDBComparator {
     /**
      * 加载索引信息
      */
-    private void loadIndexes(Connection conn, Map<String, TableInfo> schema) throws SQLException {
+    private void loadIndexes(Connection conn, Map<String, TableInfo> schema, String schemaName) throws SQLException {
         String sql = "SELECT i.schemaname, i.tablename, i.indexname, " +
                 "i.indexdef, ix.indisunique " +
                 "FROM pg_indexes i " +
                 "JOIN pg_class c ON c.relname = i.indexname " +
                 "JOIN pg_index ix ON ix.indexrelid = c.oid " +
-                "WHERE i.schemaname = 'public' " +
+                "WHERE i.schemaname = ? " +
                 "AND i.indexname NOT LIKE '%_pkey' " +
                 "ORDER BY i.tablename, i.indexname";
 
-        try (PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, schemaName);
 
-            while (rs.next()) {
-                String tableName = rs.getString("tablename");
-                String indexName = rs.getString("indexname");
-                String indexDef = rs.getString("indexdef");
-                boolean isUnique = rs.getBoolean("indisunique");
+            try (ResultSet rs = stmt.executeQuery()) {
+                int indexCount = 0;
+                while (rs.next()) {
+                    String tableName = rs.getString("tablename");
+                    String indexName = rs.getString("indexname");
+                    String indexDef = rs.getString("indexdef");
+                    boolean isUnique = rs.getBoolean("indisunique");
 
-                TableInfo tableInfo = schema.get(tableName);
-                if (tableInfo != null) {
-                    // 解析索引定义获取列信息
-                    List<String> indexColumns = parseIndexColumns(indexDef);
-                    String indexType = parseIndexType(indexDef);
+                    TableInfo tableInfo = schema.get(tableName);
+                    if (tableInfo != null) {
+                        // 解析索引定义获取列信息
+                        List<String> indexColumns = parseIndexColumns(indexDef);
+                        String indexType = parseIndexType(indexDef);
 
-                    IndexInfo indexInfo = new IndexInfo(indexName, isUnique, indexColumns, indexType);
-                    tableInfo.getIndexes().put(indexName, indexInfo);
+                        IndexInfo indexInfo = new IndexInfo(indexName, isUnique, indexColumns, indexType);
+                        tableInfo.getIndexes().put(indexName, indexInfo);
+                        indexCount++;
+                    }
                 }
+                logger.debug("从Schema '{}' 加载了 {} 个索引", schemaName, indexCount);
             }
         }
     }
@@ -226,13 +251,13 @@ public class PgSQLDBComparator {
                                    Map<String, TableInfo> targetSchema,
                                    String targetDbName) {
 
-        System.out.println(String.format("正在对比: %s vs %s", baseDatabase.getName(), targetDbName));
+        logger.info("正在对比: {} vs {}", baseDatabase.getName(), targetDbName);
 
         // 检查缺少的表和多余的表
         for (String tableName : baseSchema.keySet()) {
             if (!targetSchema.containsKey(tableName)) {
                 differences.add(new SchemaDifference(
-                        baseDatabase.getName(), targetDbName, "public", tableName, tableName,
+                        baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, tableName,
                         SchemaDifference.DifferenceType.MISSING_TABLE,
                         String.format("目标数据库 '%s' 缺少表 '%s'", targetDbName, tableName)
                 ));
@@ -248,7 +273,7 @@ public class PgSQLDBComparator {
         for (String tableName : targetSchema.keySet()) {
             if (!baseSchema.containsKey(tableName)) {
                 differences.add(new SchemaDifference(
-                        baseDatabase.getName(), targetDbName, "public", tableName, tableName,
+                        baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, tableName,
                         SchemaDifference.DifferenceType.EXTRA_TABLE,
                         String.format("目标数据库 '%s' 多出表 '%s'", targetDbName, tableName)
                 ));
@@ -282,7 +307,7 @@ public class PgSQLDBComparator {
         for (String columnName : baseColumns.keySet()) {
             if (!targetColumns.containsKey(columnName)) {
                 differences.add(new SchemaDifference(
-                        baseDatabase.getName(), targetDbName, "public", tableName, columnName,
+                        baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, columnName,
                         SchemaDifference.DifferenceType.MISSING_COLUMN,
                         String.format("目标数据库 '%s' 的表 '%s' 缺少列 '%s'", targetDbName, tableName, columnName)
                 ));
@@ -293,7 +318,7 @@ public class PgSQLDBComparator {
                 if (!baseColumn.equals(targetColumn)) {
                     String desc = buildColumnDifferenceDescription(baseColumn, targetColumn);
                     differences.add(new SchemaDifference(
-                            baseDatabase.getName(), targetDbName, "public", tableName, columnName,
+                            baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, columnName,
                             SchemaDifference.DifferenceType.COLUMN_DIFF, desc
                     ));
                 }
@@ -304,14 +329,13 @@ public class PgSQLDBComparator {
         for (String columnName : targetColumns.keySet()) {
             if (!baseColumns.containsKey(columnName)) {
                 differences.add(new SchemaDifference(
-                        baseDatabase.getName(), targetDbName, "public", tableName, columnName,
+                        baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, columnName,
                         SchemaDifference.DifferenceType.EXTRA_COLUMN,
                         String.format("目标数据库 '%s' 的表 '%s' 多出列 '%s'", targetDbName, tableName, columnName)
                 ));
             }
         }
     }
-
 
     /**
      * 构建列差异描述（增强版）
@@ -371,7 +395,7 @@ public class PgSQLDBComparator {
             String desc = String.format("主键定义不同 - 基准库: [%s], 目标库: [%s]", baseKeysStr, targetKeysStr);
 
             differences.add(new SchemaDifference(
-                    baseDatabase.getName(), targetDbName, "public", tableName, "PRIMARY_KEY",
+                    baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, "PRIMARY_KEY",
                     SchemaDifference.DifferenceType.PRIMARY_KEY_DIFF, desc,
                     baseKeysStr, targetKeysStr
             ));
@@ -397,7 +421,7 @@ public class PgSQLDBComparator {
                         baseIndex.isUnique() ? "是" : "否");
 
                 differences.add(new SchemaDifference(
-                        baseDatabase.getName(), targetDbName, "public", tableName, indexName,
+                        baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, indexName,
                         SchemaDifference.DifferenceType.MISSING_INDEX, desc
                 ));
             } else {
@@ -407,7 +431,7 @@ public class PgSQLDBComparator {
                 if (!baseIndex.equals(targetIndex)) {
                     String desc = buildIndexDifferenceDescription(baseIndex, targetIndex);
                     differences.add(new SchemaDifference(
-                            baseDatabase.getName(), targetDbName, "public", tableName, indexName,
+                            baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, indexName,
                             SchemaDifference.DifferenceType.INDEX_DIFF, desc
                     ));
                 }
@@ -425,7 +449,7 @@ public class PgSQLDBComparator {
                         targetIndex.isUnique() ? "是" : "否");
 
                 differences.add(new SchemaDifference(
-                        baseDatabase.getName(), targetDbName, "public", tableName, indexName,
+                        baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, indexName,
                         SchemaDifference.DifferenceType.EXTRA_INDEX, desc
                 ));
             }
@@ -492,7 +516,7 @@ public class PgSQLDBComparator {
         System.out.println("\n" + "=".repeat(80));
         System.out.println("               数据库结构差异详细报告");
         System.out.println("=".repeat(80));
-        System.out.println("基准数据库: " + baseDatabase.getName());
+        System.out.println("基准数据库: " + baseDatabase.getName() + " (Schema: " + baseDatabase.getSchema() + ")");
         System.out.println("对比时间: " + java.time.LocalDateTime.now().format(
                 java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         System.out.println("总差异数: " + differences.size());

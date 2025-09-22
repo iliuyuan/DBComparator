@@ -1,6 +1,8 @@
 package org.kingdee.dbcompare.config;
 
 import lombok.Data;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +16,8 @@ import java.util.Properties;
 @ConfigurationProperties(prefix = "app")
 @Data
 public class ConfigManager {
+
+    private static final Logger logger = LoggerFactory.getLogger(ConfigManager.class);
 
     @Data
     public static class CompareOptions {
@@ -62,8 +66,11 @@ public class ConfigManager {
                 props.getProperty("base.database.name"),
                 props.getProperty("base.database.url"),
                 props.getProperty("base.database.username"),
-                props.getProperty("base.database.password")
+                props.getProperty("base.database.password"),
+                props.getProperty("base.database.schema", "public") // 从配置读取schema，默认为public
         );
+
+        logger.info("基准数据库配置: 名称={}, Schema={}", baseDb.getName(), baseDb.getSchema());
 
         // 加载目标数据库
         List<DatabaseConfig> targetDbs = new ArrayList<>();
@@ -74,9 +81,12 @@ public class ConfigManager {
             String url = props.getProperty("target.database." + i + ".url");
             String username = props.getProperty("target.database." + i + ".username");
             String password = props.getProperty("target.database." + i + ".password");
+            String schema = props.getProperty("target.database." + i + ".schema", "public"); // 从配置读取schema
 
             if (name != null && url != null && username != null && password != null) {
-                targetDbs.add(new DatabaseConfig(name, url, username, password));
+                DatabaseConfig targetDb = new DatabaseConfig(name, url, username, password, schema);
+                targetDbs.add(targetDb);
+                logger.info("目标数据库{}配置: 名称={}, Schema={}", i, targetDb.getName(), targetDb.getSchema());
             }
         }
 
