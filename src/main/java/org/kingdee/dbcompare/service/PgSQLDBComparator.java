@@ -35,20 +35,22 @@ public class PgSQLDBComparator {
      * 执行数据库结构对比
      */
     public void compareSchemas() throws SQLException {
-        logger.info("开始加载基准数据库结构: {} (Schema: {})", baseDatabase.getName(), baseDatabase.getSchema());
+        logger.info("开始加载基准数据库结构: {} (Schema: {})", baseDatabase.getDisplayName(), baseDatabase.getSchema());
         baseSchema = loadDatabaseSchema(baseDatabase);
         logger.info("基准数据库加载完成，共 {} 个表", baseSchema.size());
 
         differences.clear();
 
         for (DatabaseConfig targetDb : targetDatabases) {
-            logger.info("正在对比数据库: {} (Schema: {})", targetDb.getName(), targetDb.getSchema());
+            logger.info("正在对比数据库: {} (Schema: {})", targetDb.getDisplayName(), targetDb.getSchema());
             Map<String, TableInfo> targetSchema = loadDatabaseSchema(targetDb);
-            compareTwoSchemas(baseSchema, targetSchema, targetDb.getName());
+            compareTwoSchemas(baseSchema, targetSchema, targetDb);
         }
 
         logger.info("对比完成，共发现 {} 个差异", differences.size());
     }
+
+    // ... [loadDatabaseSchema, loadTables, loadColumns, loadPrimaryKeys, loadIndexes 方法保持不变] ...
 
     /**
      * 加载数据库结构信息
@@ -59,7 +61,7 @@ public class PgSQLDBComparator {
         try (Connection conn = DriverManager.getConnection(
                 dbConfig.getUrl(), dbConfig.getUsername(), dbConfig.getPassword())) {
 
-            logger.debug("连接数据库成功: {}, Schema: {}", dbConfig.getName(), dbConfig.getSchema());
+            logger.debug("连接数据库成功: {}, Schema: {}", dbConfig.getDisplayName(), dbConfig.getSchema());
 
             // 加载表信息
             loadTables(conn, schema, dbConfig.getSchema());
@@ -245,60 +247,64 @@ public class PgSQLDBComparator {
     }
 
     /**
-     * 对比两个数据库结构
+     * 对比两个数据库结构（优化版本，使用DatabaseConfig而不是字符串）
      */
     private void compareTwoSchemas(Map<String, TableInfo> baseSchema,
                                    Map<String, TableInfo> targetSchema,
-                                   String targetDbName) {
+                                   DatabaseConfig targetDb) {
 
-        logger.info("正在对比: {} vs {}", baseDatabase.getName(), targetDbName);
+        logger.info("正在对比: {} vs {}", baseDatabase.getDisplayName(), targetDb.getDisplayName());
 
         // 检查缺少的表和多余的表
         for (String tableName : baseSchema.keySet()) {
             if (!targetSchema.containsKey(tableName)) {
                 differences.add(new SchemaDifference(
-                        baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, tableName,
+                        baseDatabase.getName(), targetDb.getName(),
+                        baseDatabase.getDisplayName(), targetDb.getDisplayName(),
+                        baseDatabase.getSchema(), tableName, tableName,
                         SchemaDifference.DifferenceType.MISSING_TABLE,
-                        String.format("目标数据库 '%s' 缺少表 '%s'", targetDbName, tableName)
+                        String.format("目标数据库 '%s' 缺少表 '%s'", targetDb.getDisplayName(), tableName)
                 ));
                 continue;
             }
 
             // 对比表结构
             compareTableStructure(baseSchema.get(tableName),
-                    targetSchema.get(tableName), targetDbName);
+                    targetSchema.get(tableName), targetDb);
         }
 
         // 检查多余的表
         for (String tableName : targetSchema.keySet()) {
             if (!baseSchema.containsKey(tableName)) {
                 differences.add(new SchemaDifference(
-                        baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, tableName,
+                        baseDatabase.getName(), targetDb.getName(),
+                        baseDatabase.getDisplayName(), targetDb.getDisplayName(),
+                        baseDatabase.getSchema(), tableName, tableName,
                         SchemaDifference.DifferenceType.EXTRA_TABLE,
-                        String.format("目标数据库 '%s' 多出表 '%s'", targetDbName, tableName)
+                        String.format("目标数据库 '%s' 多出表 '%s'", targetDb.getDisplayName(), tableName)
                 ));
             }
         }
     }
 
     /**
-     * 对比表结构
+     * 对比表结构（优化版本）
      */
-    private void compareTableStructure(TableInfo baseTable, TableInfo targetTable, String targetDbName) {
+    private void compareTableStructure(TableInfo baseTable, TableInfo targetTable, DatabaseConfig targetDb) {
         // 对比列
-        compareColumns(baseTable, targetTable, targetDbName);
+        compareColumns(baseTable, targetTable, targetDb);
 
         // 对比主键
-        comparePrimaryKeys(baseTable, targetTable, targetDbName);
+        comparePrimaryKeys(baseTable, targetTable, targetDb);
 
         // 对比索引
-        compareIndexes(baseTable, targetTable, targetDbName);
+        compareIndexes(baseTable, targetTable, targetDb);
     }
 
     /**
-     * 对比列
+     * 对比列（优化版本）
      */
-    private void compareColumns(TableInfo baseTable, TableInfo targetTable, String targetDbName) {
+    private void compareColumns(TableInfo baseTable, TableInfo targetTable, DatabaseConfig targetDb) {
         String tableName = baseTable.getTableName();
         Map<String, ColumnInfo> baseColumns = baseTable.getColumns();
         Map<String, ColumnInfo> targetColumns = targetTable.getColumns();
@@ -307,9 +313,11 @@ public class PgSQLDBComparator {
         for (String columnName : baseColumns.keySet()) {
             if (!targetColumns.containsKey(columnName)) {
                 differences.add(new SchemaDifference(
-                        baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, columnName,
+                        baseDatabase.getName(), targetDb.getName(),
+                        baseDatabase.getDisplayName(), targetDb.getDisplayName(),
+                        baseDatabase.getSchema(), tableName, columnName,
                         SchemaDifference.DifferenceType.MISSING_COLUMN,
-                        String.format("目标数据库 '%s' 的表 '%s' 缺少列 '%s'", targetDbName, tableName, columnName)
+                        String.format("目标数据库 '%s' 的表 '%s' 缺少列 '%s'", targetDb.getDisplayName(), tableName, columnName)
                 ));
             } else {
                 ColumnInfo baseColumn = baseColumns.get(columnName);
@@ -318,7 +326,9 @@ public class PgSQLDBComparator {
                 if (!baseColumn.equals(targetColumn)) {
                     String desc = buildColumnDifferenceDescription(baseColumn, targetColumn);
                     differences.add(new SchemaDifference(
-                            baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, columnName,
+                            baseDatabase.getName(), targetDb.getName(),
+                            baseDatabase.getDisplayName(), targetDb.getDisplayName(),
+                            baseDatabase.getSchema(), tableName, columnName,
                             SchemaDifference.DifferenceType.COLUMN_DIFF, desc
                     ));
                 }
@@ -329,9 +339,11 @@ public class PgSQLDBComparator {
         for (String columnName : targetColumns.keySet()) {
             if (!baseColumns.containsKey(columnName)) {
                 differences.add(new SchemaDifference(
-                        baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, columnName,
+                        baseDatabase.getName(), targetDb.getName(),
+                        baseDatabase.getDisplayName(), targetDb.getDisplayName(),
+                        baseDatabase.getSchema(), tableName, columnName,
                         SchemaDifference.DifferenceType.EXTRA_COLUMN,
-                        String.format("目标数据库 '%s' 的表 '%s' 多出列 '%s'", targetDbName, tableName, columnName)
+                        String.format("目标数据库 '%s' 的表 '%s' 多出列 '%s'", targetDb.getDisplayName(), tableName, columnName)
                 ));
             }
         }
@@ -381,9 +393,9 @@ public class PgSQLDBComparator {
     }
 
     /**
-     * 对比主键
+     * 对比主键（优化版本）
      */
-    private void comparePrimaryKeys(TableInfo baseTable, TableInfo targetTable, String targetDbName) {
+    private void comparePrimaryKeys(TableInfo baseTable, TableInfo targetTable, DatabaseConfig targetDb) {
         String tableName = baseTable.getTableName();
         Set<String> basePrimaryKeys = baseTable.getPrimaryKeys();
         Set<String> targetPrimaryKeys = targetTable.getPrimaryKeys();
@@ -395,7 +407,9 @@ public class PgSQLDBComparator {
             String desc = String.format("主键定义不同 - 基准库: [%s], 目标库: [%s]", baseKeysStr, targetKeysStr);
 
             differences.add(new SchemaDifference(
-                    baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, "PRIMARY_KEY",
+                    baseDatabase.getName(), targetDb.getName(),
+                    baseDatabase.getDisplayName(), targetDb.getDisplayName(),
+                    baseDatabase.getSchema(), tableName, "PRIMARY_KEY",
                     SchemaDifference.DifferenceType.PRIMARY_KEY_DIFF, desc,
                     baseKeysStr, targetKeysStr
             ));
@@ -403,9 +417,9 @@ public class PgSQLDBComparator {
     }
 
     /**
-     * 对比索引
+     * 对比索引（优化版本）
      */
-    private void compareIndexes(TableInfo baseTable, TableInfo targetTable, String targetDbName) {
+    private void compareIndexes(TableInfo baseTable, TableInfo targetTable, DatabaseConfig targetDb) {
         String tableName = baseTable.getTableName();
         Map<String, IndexInfo> baseIndexes = baseTable.getIndexes();
         Map<String, IndexInfo> targetIndexes = targetTable.getIndexes();
@@ -415,13 +429,15 @@ public class PgSQLDBComparator {
             if (!targetIndexes.containsKey(indexName)) {
                 IndexInfo baseIndex = baseIndexes.get(indexName);
                 String desc = String.format("目标数据库 '%s' 的表 '%s' 缺少索引 '%s' (列: %s, 类型: %s, 唯一: %s)",
-                        targetDbName, tableName, indexName,
+                        targetDb.getDisplayName(), tableName, indexName,
                         String.join(", ", baseIndex.getColumns()),
                         baseIndex.getIndexType(),
                         baseIndex.isUnique() ? "是" : "否");
 
                 differences.add(new SchemaDifference(
-                        baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, indexName,
+                        baseDatabase.getName(), targetDb.getName(),
+                        baseDatabase.getDisplayName(), targetDb.getDisplayName(),
+                        baseDatabase.getSchema(), tableName, indexName,
                         SchemaDifference.DifferenceType.MISSING_INDEX, desc
                 ));
             } else {
@@ -431,25 +447,32 @@ public class PgSQLDBComparator {
                 if (!baseIndex.equals(targetIndex)) {
                     String desc = buildIndexDifferenceDescription(baseIndex, targetIndex);
                     differences.add(new SchemaDifference(
-                            baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, indexName,
+                            baseDatabase.getName(), targetDb.getName(),
+                            baseDatabase.getDisplayName(), targetDb.getDisplayName(),
+                            baseDatabase.getSchema(), tableName, indexName,
                             SchemaDifference.DifferenceType.INDEX_DIFF, desc
                     ));
                 }
             }
         }
 
+        /**
+         * 对比索引（优化版本）- 续
+         */
         // 检查多余的索引
         for (String indexName : targetIndexes.keySet()) {
             if (!baseIndexes.containsKey(indexName)) {
                 IndexInfo targetIndex = targetIndexes.get(indexName);
                 String desc = String.format("目标数据库 '%s' 的表 '%s' 多出索引 '%s' (列: %s, 类型: %s, 唯一: %s)",
-                        targetDbName, tableName, indexName,
+                        targetDb.getDisplayName(), tableName, indexName,
                         String.join(", ", targetIndex.getColumns()),
                         targetIndex.getIndexType(),
                         targetIndex.isUnique() ? "是" : "否");
 
                 differences.add(new SchemaDifference(
-                        baseDatabase.getName(), targetDbName, baseDatabase.getSchema(), tableName, indexName,
+                        baseDatabase.getName(), targetDb.getName(),
+                        baseDatabase.getDisplayName(), targetDb.getDisplayName(),
+                        baseDatabase.getSchema(), tableName, indexName,
                         SchemaDifference.DifferenceType.EXTRA_INDEX, desc
                 ));
             }
@@ -499,24 +522,25 @@ public class PgSQLDBComparator {
     }
 
     /**
-     * 按数据库获取差异（使用新的字段）
+     * 按数据库获取差异（使用显示名称）
      */
     public Map<String, List<SchemaDifference>> getDifferencesByDatabase() {
         Map<String, List<SchemaDifference>> result = new HashMap<>();
         for (SchemaDifference diff : differences) {
-            result.computeIfAbsent(diff.getTargetDatabaseName(), k -> new ArrayList<>()).add(diff);
+            String key = diff.getTargetDatabaseDisplayName();
+            result.computeIfAbsent(key, k -> new ArrayList<>()).add(diff);
         }
         return result;
     }
 
     /**
-     * 打印增强的差异报告
+     * 打印增强的差异报告（优化显示IP信息）
      */
     public void printDifferencesReport() {
         System.out.println("\n" + "=".repeat(80));
         System.out.println("               数据库结构差异详细报告");
         System.out.println("=".repeat(80));
-        System.out.println("基准数据库: " + baseDatabase.getName() + " (Schema: " + baseDatabase.getSchema() + ")");
+        System.out.println("基准数据库: " + baseDatabase.getDisplayName() + " (Schema: " + baseDatabase.getSchema() + ")");
         System.out.println("对比时间: " + java.time.LocalDateTime.now().format(
                 java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         System.out.println("总差异数: " + differences.size());
@@ -526,15 +550,15 @@ public class PgSQLDBComparator {
             return;
         }
 
-        // 按数据库分组显示
+        // 按数据库分组显示（使用显示名称）
         Map<String, List<SchemaDifference>> byDatabase = getDifferencesByDatabase();
 
-        for (String dbName : byDatabase.keySet()) {
+        for (String dbDisplayName : byDatabase.keySet()) {
             System.out.println("\n" + "-".repeat(60));
-            System.out.println(String.format("目标数据库: %s", dbName));
+            System.out.println(String.format("目标数据库: %s", dbDisplayName));
             System.out.println("-".repeat(60));
 
-            List<SchemaDifference> dbDiffs = byDatabase.get(dbName);
+            List<SchemaDifference> dbDiffs = byDatabase.get(dbDisplayName);
 
             // 统计各类型差异数量
             Map<SchemaDifference.DifferenceType, Long> typeCount = dbDiffs.stream()
@@ -585,7 +609,7 @@ public class PgSQLDBComparator {
     }
 
     /**
-     * 导出差异到CSV文件
+     * 导出差异到CSV文件（优化为显示IP信息）
      */
     public void exportDifferencesToCSV(String filename) throws java.io.IOException {
         try (java.io.PrintWriter writer = new java.io.PrintWriter(filename, "UTF-8")) {
@@ -593,8 +617,8 @@ public class PgSQLDBComparator {
 
             for (SchemaDifference diff : differences) {
                 writer.printf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"%n",
-                        escapeCsvValue(diff.getBaseDatabaseName()),
-                        escapeCsvValue(diff.getTargetDatabaseName()),
+                        escapeCsvValue(diff.getBaseDatabaseDisplayName()),
+                        escapeCsvValue(diff.getTargetDatabaseDisplayName()),
                         escapeCsvValue(diff.getSchemaName() != null ? diff.getSchemaName() : "public"),
                         escapeCsvValue(diff.getTableName()),
                         escapeCsvValue(diff.getItemName()),
