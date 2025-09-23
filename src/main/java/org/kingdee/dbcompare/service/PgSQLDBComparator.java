@@ -50,8 +50,6 @@ public class PgSQLDBComparator {
         logger.info("对比完成，共发现 {} 个差异", differences.size());
     }
 
-    // ... [loadDatabaseSchema, loadTables, loadColumns, loadPrimaryKeys, loadIndexes 方法保持不变] ...
-
     /**
      * 加载数据库结构信息
      */

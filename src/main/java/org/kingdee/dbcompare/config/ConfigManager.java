@@ -19,39 +19,6 @@ public class ConfigManager {
 
     private static final Logger logger = LoggerFactory.getLogger(ConfigManager.class);
 
-    @Data
-    public static class CompareOptions {
-        private boolean tables = true;
-        private boolean columns = true;
-        private boolean indexes = true;
-        private boolean primaryKeys = true;
-        private boolean foreignKeys = true;
-        private boolean constraints = true;
-    }
-
-    @Data
-    public static class FilterOptions {
-        private boolean excludeSystemTables = true;
-        private List<String> includeTablePatterns = new ArrayList<>();
-        private List<String> excludeTablePatterns = new ArrayList<>();
-        private List<String> includeSchemas = List.of("public");
-        private List<String> excludeSchemas = List.of("information_schema", "pg_catalog");
-    }
-
-    @Data
-    public static class OutputOptions {
-        private String directory = "./output/reports";
-        private List<String> formats = List.of("csv", "json");
-        private boolean timestamp = true;
-    }
-
-    private String name;
-    private String version;
-    private String description;
-    private CompareOptions compare = new CompareOptions();
-    private FilterOptions filter = new FilterOptions();
-    private OutputOptions output = new OutputOptions();
-
     /**
      * 从配置文件加载数据库配置
      */

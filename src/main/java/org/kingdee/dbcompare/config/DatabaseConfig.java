@@ -12,6 +12,10 @@ public class DatabaseConfig {
     private String password;
     private String name;
     private String schema; // 新增schema字段
+    /**
+     * -- GETTER --
+     *  获取显示名称，用于报告中显示
+     */
     private String displayName; // 显示名称，包含IP信息
 
     public DatabaseConfig(String name, String url, String username, String password, String schema) {
@@ -21,11 +25,6 @@ public class DatabaseConfig {
         this.password = password;
         this.schema = schema != null && !schema.trim().isEmpty() ? schema : "public"; // 默认为public
         this.displayName = generateDisplayName(name, url);
-    }
-
-    // 保持向后兼容的构造函数
-    public DatabaseConfig(String name, String url, String username, String password) {
-        this(name, url, username, password, "public");
     }
 
     /**
@@ -66,20 +65,5 @@ public class DatabaseConfig {
 
         // 如果无法解析IP信息，返回原数据库名
         return dbName;
-    }
-
-    /**
-     * 获取显示名称，用于报告中显示
-     */
-    public String getDisplayName() {
-        return this.displayName;
-    }
-
-    /**
-     * 重新设置URL时更新显示名称
-     */
-    public void setUrl(String url) {
-        this.url = url;
-        this.displayName = generateDisplayName(this.name, url);
     }
 }

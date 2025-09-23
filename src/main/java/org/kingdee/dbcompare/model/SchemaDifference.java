@@ -62,15 +62,6 @@ public class SchemaDifference {
         this.targetDatabaseDisplay = targetDatabaseDisplay;
     }
 
-    public SchemaDifference(String baseDatabaseName, String targetDatabaseName,
-                            String schemaName, String tableName, String itemName,
-                            DifferenceType type, String description,
-                            String baseValue, String targetValue) {
-        this(baseDatabaseName, targetDatabaseName, schemaName, tableName, itemName, type, description);
-        this.baseValue = baseValue;
-        this.targetValue = targetValue;
-    }
-
     // 新增带显示名称和值的构造函数
     public SchemaDifference(String baseDatabaseName, String targetDatabaseName,
                             String baseDatabaseDisplay, String targetDatabaseDisplay,
@@ -123,11 +114,5 @@ public class SchemaDifference {
      */
     public String getTargetDatabaseDisplayName() {
         return targetDatabaseDisplay != null ? targetDatabaseDisplay : targetDatabaseName;
-    }
-
-    // 保持向后兼容的方法
-    @Deprecated
-    public String getDatabaseName() {
-        return targetDatabaseName;
     }
 }

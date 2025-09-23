@@ -171,7 +171,7 @@ public class ReportGenerator {
         }
 
         // 统计信息
-        if (differences.size() > 0) {
+        if (!differences.isEmpty()) {
             Map<String, Long> typeStats = differences.stream()
                     .collect(java.util.stream.Collectors.groupingBy(
                             diff -> diff.getType().getDescription(),
@@ -238,33 +238,19 @@ public class ReportGenerator {
     }
 
     private String getCssClass(SchemaDifference.DifferenceType type) {
-        switch (type) {
-            case MISSING_TABLE:
-            case MISSING_COLUMN:
-            case MISSING_INDEX:
-                return "missing";
-            case EXTRA_TABLE:
-            case EXTRA_COLUMN:
-            case EXTRA_INDEX:
-                return "extra";
-            default:
-                return "different";
-        }
+        return switch (type) {
+            case MISSING_TABLE, MISSING_COLUMN, MISSING_INDEX -> "missing";
+            case EXTRA_TABLE, EXTRA_COLUMN, EXTRA_INDEX -> "extra";
+            default -> "different";
+        };
     }
 
     private String getTypeBadgeClass(SchemaDifference.DifferenceType type) {
-        switch (type) {
-            case MISSING_TABLE:
-            case MISSING_COLUMN:
-            case MISSING_INDEX:
-                return "type-missing";
-            case EXTRA_TABLE:
-            case EXTRA_COLUMN:
-            case EXTRA_INDEX:
-                return "type-extra";
-            default:
-                return "type-different";
-        }
+        return switch (type) {
+            case MISSING_TABLE, MISSING_COLUMN, MISSING_INDEX -> "type-missing";
+            case EXTRA_TABLE, EXTRA_COLUMN, EXTRA_INDEX -> "type-extra";
+            default -> "type-different";
+        };
     }
 
     private String escapeHtml(String text) {
