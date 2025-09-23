@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * PostgreSQL数据库结构对比工具
@@ -56,8 +57,10 @@ public class PgSQLDBComparator {
     private Map<String, TableInfoBO> loadDatabaseSchema(DatabaseComparatorConfig dbConfig) throws SQLException {
         Map<String, TableInfoBO> schema = new ConcurrentHashMap<>();
 
-        try (Connection conn = DriverManager.getConnection(
-                dbConfig.getUrl(), dbConfig.getUsername(), dbConfig.getPassword())) {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(
+                    dbConfig.getUrl(), dbConfig.getUsername(), dbConfig.getPassword());
 
             logger.debug("连接数据库成功: {}, Schema: {}", dbConfig.getDisplayName(), dbConfig.getSchema());
 
@@ -72,6 +75,17 @@ public class PgSQLDBComparator {
 
             // 加载索引信息
             loadIndexes(conn, schema, dbConfig.getSchema());
+        } catch (Exception e) {
+            logger.error("加载数据库结构失败: {}", dbConfig.getDisplayName(), e);
+            throw e;
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.close();
+                } catch (Exception e) {
+                    logger.warn("关闭数据库连接时发生异常: {}", dbConfig.getDisplayName(), e);
+                }
+            }
         }
 
         return schema;
@@ -516,7 +530,7 @@ public class PgSQLDBComparator {
     public List<SchemaDifference> getDifferencesByType(SchemaDifference.DifferenceType type) {
         return differences.stream()
                 .filter(diff -> diff.getType() == type)
-                .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+                .collect(Collectors.toList());
     }
 
     /**

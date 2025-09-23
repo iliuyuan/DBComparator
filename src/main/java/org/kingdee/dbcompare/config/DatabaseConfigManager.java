@@ -12,8 +12,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
-@Component
-@ConfigurationProperties(prefix = "app")
 @Data
 public class DatabaseConfigManager {
 
