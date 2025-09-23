@@ -6,7 +6,7 @@ import java.util.Objects;
 
 // 列信息
 @Data
-public class ColumnInfo {
+public class ColumnInfoBO {
     private String columnName;
     private String dataType;
     private boolean nullable;
@@ -15,9 +15,9 @@ public class ColumnInfo {
     private int numericPrecision;
     private int numericScale;
 
-    public ColumnInfo(String columnName, String dataType, boolean nullable,
-                      String defaultValue, int characterMaxLength,
-                      int numericPrecision, int numericScale) {
+    public ColumnInfoBO(String columnName, String dataType, boolean nullable,
+                        String defaultValue, int characterMaxLength,
+                        int numericPrecision, int numericScale) {
         this.columnName = columnName;
         this.dataType = dataType;
         this.nullable = nullable;
@@ -31,7 +31,7 @@ public class ColumnInfo {
     public boolean equals(Object obj) {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
-        ColumnInfo that = (ColumnInfo) obj;
+        ColumnInfoBO that = (ColumnInfoBO) obj;
         return nullable == that.nullable &&
                 characterMaxLength == that.characterMaxLength &&
                 numericPrecision == that.numericPrecision &&

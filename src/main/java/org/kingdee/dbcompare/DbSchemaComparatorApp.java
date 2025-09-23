@@ -1,11 +1,11 @@
 package org.kingdee.dbcompare;
 
 import lombok.Getter;
-import org.kingdee.dbcompare.config.ConfigManager;
-import org.kingdee.dbcompare.config.DatabaseConfig;
+import org.kingdee.dbcompare.config.DatabaseConfigManager;
+import org.kingdee.dbcompare.config.DatabaseComparatorConfig;
 import org.kingdee.dbcompare.model.SchemaDifference;
 import org.kingdee.dbcompare.service.PgSQLDBComparator;
-import org.kingdee.dbcompare.service.ReportGenerator;
+import org.kingdee.dbcompare.service.ReportGeneratorService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,7 +39,7 @@ public class DbSchemaComparatorApp implements CommandLineRunner {
     private static final Logger logger = LoggerFactory.getLogger(DbSchemaComparatorApp.class);
 
     @Autowired
-    private ReportGenerator reportGenerator;
+    private ReportGeneratorService reportGeneratorService;
 
     // 并发处理线程数
     private static final int THREAD_POOL_SIZE = 8;
@@ -71,9 +71,9 @@ public class DbSchemaComparatorApp implements CommandLineRunner {
         String configFile = "src/main/resources/database-config.properties";
 
         // 加载数据库配置
-        ConfigManager.DatabaseConfigSet configSet = ConfigManager.loadDatabaseConfig(configFile);
-        DatabaseConfig baseDatabase = configSet.getBaseDatabase();
-        List<DatabaseConfig> targetDatabases = configSet.getTargetDatabases();
+        DatabaseConfigManager.DatabaseConfigSet configSet = DatabaseConfigManager.loadDatabaseConfig(configFile);
+        DatabaseComparatorConfig baseDatabase = configSet.getBaseDatabase();
+        List<DatabaseComparatorConfig> targetDatabases = configSet.getTargetDatabases();
 
         logger.info("基准数据库: {}", baseDatabase.getDisplayName());
         logger.info("目标数据库数量: {}", targetDatabases.size());
@@ -108,7 +108,7 @@ public class DbSchemaComparatorApp implements CommandLineRunner {
     /**
      * 设置输出目录结构
      */
-    private void setupOutputDirectories(DatabaseConfig baseDatabase) throws Exception {
+    private void setupOutputDirectories(DatabaseComparatorConfig baseDatabase) throws Exception {
         String safeBaseName = sanitizeFileName(baseDatabase.getName());
         String baseDbDir = BASE_OUTPUT_DIR + "/" + safeBaseName;
 
@@ -124,8 +124,8 @@ public class DbSchemaComparatorApp implements CommandLineRunner {
     /**
      * 分批处理数据库
      */
-    private ComparisonResult processDatabasesInBatches(DatabaseConfig baseDatabase,
-                                                       List<DatabaseConfig> targetDatabases,
+    private ComparisonResult processDatabasesInBatches(DatabaseComparatorConfig baseDatabase,
+                                                       List<DatabaseComparatorConfig> targetDatabases,
                                                        ExecutorService executor) {
 
         ComparisonResult result = new ComparisonResult();
@@ -135,7 +135,7 @@ public class DbSchemaComparatorApp implements CommandLineRunner {
         // 分批处理
         for (int i = 0; i < totalDatabases; i += BATCH_SIZE) {
             int endIndex = Math.min(i + BATCH_SIZE, totalDatabases);
-            List<DatabaseConfig> batch = targetDatabases.subList(i, endIndex);
+            List<DatabaseComparatorConfig> batch = targetDatabases.subList(i, endIndex);
 
             logger.info("处理第 {} 批数据库，包含数据库 {} - {} / {}",
                     (i / BATCH_SIZE + 1), i + 1, endIndex, totalDatabases);
@@ -143,7 +143,7 @@ public class DbSchemaComparatorApp implements CommandLineRunner {
             // 并发处理当前批次
             List<CompletableFuture<DatabaseComparisonResult>> futures = new ArrayList<>();
 
-            for (DatabaseConfig targetDb : batch) {
+            for (DatabaseComparatorConfig targetDb : batch) {
                 CompletableFuture<DatabaseComparisonResult> future = CompletableFuture.supplyAsync(() -> {
                     try {
                         return processSingleDatabase(baseDatabase, targetDb);
@@ -172,15 +172,15 @@ public class DbSchemaComparatorApp implements CommandLineRunner {
     /**
      * 处理单个数据库
      */
-    private DatabaseComparisonResult processSingleDatabase(DatabaseConfig baseDatabase,
-                                                           DatabaseConfig targetDatabase) {
+    private DatabaseComparisonResult processSingleDatabase(DatabaseComparatorConfig baseDatabase,
+                                                           DatabaseComparatorConfig targetDatabase) {
 
         logger.info("开始处理数据库: {}", targetDatabase.getDisplayName());
         long startTime = System.currentTimeMillis();
 
         try {
             // 创建单数据库对比器
-            List<DatabaseConfig> singleTargetList = List.of(targetDatabase);
+            List<DatabaseComparatorConfig> singleTargetList = List.of(targetDatabase);
             PgSQLDBComparator comparator = new PgSQLDBComparator(baseDatabase, singleTargetList);
 
             // 执行对比
@@ -205,8 +205,8 @@ public class DbSchemaComparatorApp implements CommandLineRunner {
     /**
      * 生成标准命名的报告文件
      */
-    private void generateStandardReports(DatabaseConfig baseDatabase,
-                                         DatabaseConfig targetDatabase,
+    private void generateStandardReports(DatabaseComparatorConfig baseDatabase,
+                                         DatabaseComparatorConfig targetDatabase,
                                          List<SchemaDifference> differences) throws Exception {
 
         String safeBaseName = sanitizeFileName(baseDatabase.getName());
@@ -227,8 +227,8 @@ public class DbSchemaComparatorApp implements CommandLineRunner {
 
         // 导出报告
         exportDifferencesToCSV(differences, csvFile);
-        reportGenerator.exportToJSON(differences, jsonFile);
-        reportGenerator.exportToHTML(differences, htmlFile);
+        reportGeneratorService.exportToJSON(differences, jsonFile);
+        reportGeneratorService.exportToHTML(differences, htmlFile);
 
         // 生成详细摘要
         generateDetailedSummary(baseDatabase, targetDatabase, differences, summaryFile);
@@ -239,8 +239,8 @@ public class DbSchemaComparatorApp implements CommandLineRunner {
     /**
      * 生成详细摘要文件
      */
-    private void generateDetailedSummary(DatabaseConfig baseDatabase,
-                                         DatabaseConfig targetDatabase,
+    private void generateDetailedSummary(DatabaseComparatorConfig baseDatabase,
+                                         DatabaseComparatorConfig targetDatabase,
                                          List<SchemaDifference> differences,
                                          String summaryFile) throws Exception {
 
@@ -336,8 +336,8 @@ public class DbSchemaComparatorApp implements CommandLineRunner {
     /**
      * 生成主总览报告
      */
-    private void generateMasterSummary(DatabaseConfig baseDatabase,
-                                       List<DatabaseConfig> targetDatabases,
+    private void generateMasterSummary(DatabaseComparatorConfig baseDatabase,
+                                       List<DatabaseComparatorConfig> targetDatabases,
                                        ComparisonResult result,
                                        LocalDateTime comparisonTime) throws Exception {
 
@@ -406,7 +406,7 @@ public class DbSchemaComparatorApp implements CommandLineRunner {
     /**
      * 更新对比历史记录
      */
-    private void updateComparisonHistory(DatabaseConfig baseDatabase,
+    private void updateComparisonHistory(DatabaseComparatorConfig baseDatabase,
                                          ComparisonResult result,
                                          LocalDateTime comparisonTime) throws Exception {
 
@@ -515,11 +515,11 @@ public class DbSchemaComparatorApp implements CommandLineRunner {
     // 内部类：单个数据库对比结果
     @Getter
     private static class DatabaseComparisonResult {
-        private final DatabaseConfig database;
+        private final DatabaseComparatorConfig database;
         private final boolean success;
         private final int differenceCount;
 
-        public DatabaseComparisonResult(DatabaseConfig database, boolean success, int differenceCount) {
+        public DatabaseComparisonResult(DatabaseComparatorConfig database, boolean success, int differenceCount) {
             this.database = database;
             this.success = success;
             this.differenceCount = differenceCount;

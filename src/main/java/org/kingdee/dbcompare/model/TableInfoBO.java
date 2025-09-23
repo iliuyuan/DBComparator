@@ -9,14 +9,14 @@ import java.util.Set;
 
 // 表信息
 @Data
-public class TableInfo {
+public class TableInfoBO {
     private String tableName;
     private String tableType;
-    private Map<String, ColumnInfo> columns = new HashMap<>();
-    private Map<String, IndexInfo> indexes = new HashMap<>();
+    private Map<String, ColumnInfoBO> columns = new HashMap<>();
+    private Map<String, IndexInfoBO> indexes = new HashMap<>();
     private Set<String> primaryKeys = new HashSet<>();
 
-    public TableInfo(String tableName, String tableType) {
+    public TableInfoBO(String tableName, String tableType) {
         this.tableName = tableName;
         this.tableType = tableType;
     }

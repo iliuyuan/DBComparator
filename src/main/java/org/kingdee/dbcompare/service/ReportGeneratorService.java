@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-public class ReportGenerator {
+public class ReportGeneratorService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 

@@ -7,13 +7,13 @@ import java.util.Objects;
 
 // 索引信息
 @Data
-public class IndexInfo {
+public class IndexInfoBO {
     private String indexName;
     private boolean unique;
     private List<String> columns;
     private String indexType;
 
-    public IndexInfo(String indexName, boolean unique, List<String> columns, String indexType) {
+    public IndexInfoBO(String indexName, boolean unique, List<String> columns, String indexType) {
         this.indexName = indexName;
         this.unique = unique;
         this.columns = columns;
@@ -24,10 +24,10 @@ public class IndexInfo {
     public boolean equals(Object obj) {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
-        IndexInfo indexInfo = (IndexInfo) obj;
-        return unique == indexInfo.unique &&
-                Objects.equals(columns, indexInfo.columns) &&
-                Objects.equals(indexType, indexInfo.indexType);
+        IndexInfoBO indexInfoBO = (IndexInfoBO) obj;
+        return unique == indexInfoBO.unique &&
+                Objects.equals(columns, indexInfoBO.columns) &&
+                Objects.equals(indexType, indexInfoBO.indexType);
     }
 }
 

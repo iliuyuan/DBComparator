@@ -6,7 +6,7 @@ import java.net.URISyntaxException;
 
 // 数据库连接信息
 @Data
-public class DatabaseConfig {
+public class DatabaseComparatorConfig {
     private String url;
     private String username;
     private String password;
@@ -18,7 +18,7 @@ public class DatabaseConfig {
      */
     private String displayName; // 显示名称，包含IP信息
 
-    public DatabaseConfig(String name, String url, String username, String password, String schema) {
+    public DatabaseComparatorConfig(String name, String url, String username, String password, String schema) {
         this.name = name;
         this.url = url;
         this.username = username;
