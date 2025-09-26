@@ -115,7 +115,7 @@ public class ReportGeneratorService {
     }
 
     /**
-     * 优化的HTML报告生成方法 - 减少冗余信息，增强可读性
+     * 优化的HTML报告生成方法 - 添加差异类型过滤功能
      */
     public void exportToHTML(List<SchemaDifference> differences, String filename) throws IOException {
         StringBuilder html = new StringBuilder();
@@ -134,16 +134,19 @@ public class ReportGeneratorService {
                 .append("<div class='container'>\n");
 
         // 报告标题
-        html.append("<h1>数据库结构差异报告</h1>\n");
+        html.append("<h1>📊 数据库结构差异分析报告</h1>\n");
 
         if (differences.isEmpty()) {
             html.append("<div class='success-message'>\n")
-                    .append("    <h2>✅ 完全一致</h2>\n")
-                    .append("    <p>所有数据库结构完全一致，未发现任何差异。</p>\n")
+                    .append("    <h2>✅ 结构完全一致</h2>\n")
+                    .append("    <p>所有目标数据库的结构与基准数据库完全一致，未发现任何差异。</p>\n")
                     .append("</div>\n");
         } else {
             // 对比信息概览
             generateComparisonOverview(html, differences);
+
+            // 添加过滤器控件
+            generateFilterControls(html, differences);
 
             // 统计概览
             generateStatisticsOverview(html, differences);
@@ -151,6 +154,9 @@ public class ReportGeneratorService {
             // 按数据库分组的差异报告
             generateGroupedDifferenceReport(html, differences);
         }
+
+        // 添加JavaScript功能
+        html.append(generateJavaScript());
 
         html.append("</div>\n")
                 .append("</body>\n")
@@ -162,234 +168,272 @@ public class ReportGeneratorService {
     }
 
     /**
+     * 生成过滤器控件
+     */
+    private void generateFilterControls(StringBuilder html, List<SchemaDifference> differences) {
+        // 获取所有差异类型
+        Map<String, Long> typeStats = differences.stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        diff -> diff.getType().toString(),
+                        java.util.LinkedHashMap::new,
+                        java.util.stream.Collectors.counting()
+                ));
+
+        html.append("<div class='filter-section'>\n")
+                .append("    <div class='filter-header'>\n")
+                .append("        <h3>🔧 过滤器</h3>\n")
+                .append("        <div class='filter-actions'>\n")
+                .append("            <button id='selectAll' class='filter-btn'>全选</button>\n")
+                .append("            <button id='selectNone' class='filter-btn'>全不选</button>\n")
+                .append("            <button id='resetFilter' class='filter-btn reset'>重置</button>\n")
+                .append("        </div>\n")
+                .append("    </div>\n")
+                .append("    <div class='filter-controls'>\n");
+
+        // 生成每个差异类型的复选框
+        for (Map.Entry<String, Long> entry : typeStats.entrySet()) {
+            String typeKey = entry.getKey();
+            String typeName = SchemaDifference.DifferenceType.valueOf(typeKey).getDescription();
+            Long count = entry.getValue();
+            String cssClass = getFilterCssClass(typeKey);
+
+            html.append("        <label class='filter-checkbox'>\n")
+                    .append("            <input type='checkbox' value='").append(typeKey)
+                    .append("' checked data-type='").append(typeKey).append("'>\n")
+                    .append("            <span class='checkmark ").append(cssClass).append("'></span>\n")
+                    .append("            <span class='filter-label'>").append(typeName)
+                    .append(" <span class='count'>(").append(count).append(")</span></span>\n")
+                    .append("        </label>\n");
+        }
+
+        html.append("    </div>\n")
+                .append("    <div class='filter-stats'>\n")
+                .append("        <span id='showingCount'>显示: ").append(differences.size()).append(" 项差异</span>\n")
+                .append("        <span id='totalCount'>总计: ").append(differences.size()).append(" 项</span>\n")
+                .append("    </div>\n")
+                .append("</div>\n");
+    }
+
+    /**
      * 生成优化的CSS样式
      */
     private String generateOptimizedCSS() {
-        return """
-                body { 
-                    font-family: 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; 
-                    margin: 0; 
-                    padding: 20px; 
-                    background-color: #f8fafc; 
-                    color: #333; 
-                    line-height: 1.6;
-                }
-                
-                .container { 
-                    max-width: 1200px; 
-                    margin: 0 auto; 
-                    background: white; 
-                    padding: 40px; 
-                    border-radius: 12px; 
-                    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-                }
-                
-                h1 { 
-                    color: #2563eb; 
-                    text-align: center; 
-                    margin-bottom: 40px; 
-                    font-size: 2.5em;
-                    font-weight: 300;
-                }
-                
-                .comparison-overview {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 30px;
-                    margin-bottom: 40px;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    padding: 30px;
-                    border-radius: 12px;
-                }
-                
-                .db-info {
-                    background: rgba(255,255,255,0.1);
-                    padding: 20px;
-                    border-radius: 8px;
-                    backdrop-filter: blur(10px);
-                }
-                
-                .db-info h3 {
-                    margin: 0 0 15px 0;
-                    font-size: 1.2em;
-                    opacity: 0.9;
-                }
-                
-                .db-detail {
-                    font-size: 1.1em;
-                    margin: 5px 0;
-                }
-                
-                .stats-grid { 
-                    display: grid; 
-                    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); 
-                    gap: 20px; 
-                    margin: 30px 0; 
-                }
-                
-                .stat-card { 
-                    background: #f8fafc;
-                    border: 2px solid #e2e8f0;
-                    border-radius: 8px; 
-                    padding: 20px; 
-                    text-align: center;
-                    transition: transform 0.2s;
-                }
-                
-                .stat-card:hover {
-                    transform: translateY(-2px);
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-                }
-                
-                .stat-number { 
-                    font-size: 2.5em; 
-                    font-weight: bold; 
-                    margin-bottom: 5px;
-                }
-                
-                .stat-number.critical { color: #dc2626; }
-                .stat-number.warning { color: #ea580c; }
-                .stat-number.info { color: #2563eb; }
-                
-                .stat-label { 
-                    color: #64748b; 
-                    font-size: 0.9em;
-                    font-weight: 500;
-                }
-                
-                .database-section {
-                    margin: 40px 0;
-                    border: 1px solid #e2e8f0;
-                    border-radius: 12px;
-                    overflow: hidden;
-                }
-                
-                .database-header {
-                    background: #f1f5f9;
-                    padding: 20px 30px;
-                    border-bottom: 1px solid #e2e8f0;
-                }
-                
-                .database-title {
-                    font-size: 1.4em;
-                    font-weight: 600;
-                    color: #1e293b;
-                    margin: 0 0 10px 0;
-                }
-                
-                .database-stats {
-                    display: flex;
-                    gap: 30px;
-                    font-size: 0.95em;
-                    color: #64748b;
-                }
-                
-                .database-stats span {
-                    font-weight: 600;
-                    color: #374151;
-                }
-                
-                .differences-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin: 0;
-                }
-                
-                .differences-table th {
-                    background: #f8fafc;
-                    padding: 15px 20px;
-                    text-align: left;
-                    font-weight: 600;
-                    color: #374151;
-                    border-bottom: 2px solid #e2e8f0;
-                    position: sticky;
-                    top: 0;
-                    z-index: 10;
-                }
-                
-                .differences-table td {
-                    padding: 12px 20px;
-                    border-bottom: 1px solid #f1f5f9;
-                    vertical-align: top;
-                }
-                
-                .differences-table tr:hover {
-                    background: #fafbfc;
-                }
-                
-                .type-badge { 
-                    padding: 6px 12px; 
-                    border-radius: 20px; 
-                    color: white; 
-                    font-size: 0.8em; 
-                    font-weight: 600;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                }
-                
-                .type-missing { background: linear-gradient(45deg, #dc2626, #ef4444); }
-                .type-extra { background: linear-gradient(45deg, #16a34a, #22c55e); }
-                .type-different { background: linear-gradient(45deg, #ea580c, #f97316); }
-                
-                .table-name {
-                    font-weight: 600;
-                    color: #1e293b;
-                }
-                
-                .item-name {
-                    font-family: 'Consolas', 'Monaco', monospace;
-                    background: #f1f5f9;
-                    padding: 2px 6px;
-                    border-radius: 4px;
-                    font-size: 0.9em;
-                }
-                
-                .description {
-                    max-width: 400px;
-                    word-wrap: break-word;
-                    color: #64748b;
-                    font-size: 0.95em;
-                }
-                
-                .success-message {
-                    text-align: center;
-                    background: linear-gradient(135deg, #10b981, #34d399);
-                    color: white;
-                    padding: 40px;
-                    border-radius: 12px;
-                    margin: 40px 0;
-                }
-                
-                .success-message h2 {
-                    margin: 0 0 15px 0;
-                    font-size: 2em;
-                }
-                
-                .no-differences {
-                    text-align: center;
-                    background: #f0fdf4;
-                    color: #166534;
-                    padding: 30px;
-                    border-radius: 8px;
-                    border: 1px solid #bbf7d0;
-                }
-                
-                @media (max-width: 768px) {
-                    .comparison-overview {
-                        grid-template-columns: 1fr;
-                        gap: 20px;
-                    }
-                
-                    .stats-grid {
-                        grid-template-columns: repeat(2, 1fr);
-                    }
-                
-                    .differences-table {
-                        font-size: 0.9em;
-                    }
-                }
-                """;
+        StringBuilder css = new StringBuilder();
+        css.append("* { box-sizing: border-box; margin: 0; padding: 0; }\n");
+        css.append("body { font-family: 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; margin: 0; padding: 20px; background: #f8fafc; color: #2d3748; line-height: 1.6; min-height: 100vh; }\n");
+        css.append(".container { max-width: 1400px; margin: 0 auto; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.15); backdrop-filter: blur(10px); }\n");
+        css.append("h1 { color: #2b6cb0; text-align: center; margin-bottom: 40px; font-size: 2.8em; font-weight: 700; text-shadow: 2px 2px 4px rgba(0,0,0,0.1); position: relative; }\n");
+        css.append("h1::after { content: ''; display: block; width: 100px; height: 4px; background: #667eea; margin: 15px auto 0; border-radius: 2px; }\n");
+
+        // 过滤器样式
+        css.append(".filter-section { background: #ffffff; border: 2px solid #e2e8f0; border-radius: 16px; padding: 25px; margin: 30px 0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }\n");
+        css.append(".filter-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #f1f5f9; }\n");
+        css.append(".filter-header h3 { margin: 0; color: #2b6cb0; font-size: 1.3em; font-weight: 600; }\n");
+        css.append(".filter-actions { display: flex; gap: 10px; }\n");
+        css.append(".filter-btn { padding: 8px 16px; border: 2px solid #e2e8f0; background: #ffffff; color: #4a5568; border-radius: 8px; cursor: pointer; font-size: 0.9em; font-weight: 600; transition: all 0.2s ease; }\n");
+        css.append(".filter-btn:hover { border-color: #667eea; color: #667eea; transform: translateY(-1px); }\n");
+        css.append(".filter-btn.reset { background: #fed7d7; border-color: #fc8181; color: #c53030; }\n");
+        css.append(".filter-btn.reset:hover { background: #feb2b2; border-color: #f56565; }\n");
+        css.append(".filter-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin: 20px 0; }\n");
+        css.append(".filter-checkbox { display: flex; align-items: center; padding: 12px 16px; background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 10px; cursor: pointer; transition: all 0.2s ease; user-select: none; }\n");
+        css.append(".filter-checkbox:hover { background: #edf2f7; border-color: #cbd5e0; transform: translateY(-1px); }\n");
+        css.append(".filter-checkbox input { display: none; }\n");
+        css.append(".checkmark { width: 20px; height: 20px; border-radius: 6px; margin-right: 12px; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; border: 2px solid #cbd5e0; background: #ffffff; }\n");
+        css.append(".checkmark.critical { border-color: #e53e3e; }\n");
+        css.append(".checkmark.warning { border-color: #dd6b20; }\n");
+        css.append(".checkmark.info { border-color: #3182ce; }\n");
+        css.append(".filter-checkbox input:checked + .checkmark { color: white; font-weight: bold; }\n");
+        css.append(".filter-checkbox input:checked + .checkmark.critical { background: #e53e3e; border-color: #e53e3e; }\n");
+        css.append(".filter-checkbox input:checked + .checkmark.warning { background: #dd6b20; border-color: #dd6b20; }\n");
+        css.append(".filter-checkbox input:checked + .checkmark.info { background: #3182ce; border-color: #3182ce; }\n");
+        css.append(".filter-checkbox input:checked + .checkmark::after { content: '✓'; font-size: 14px; font-weight: bold; }\n");
+        css.append(".filter-label { flex: 1; font-weight: 600; color: #2d3748; }\n");
+        css.append(".count { color: #718096; font-weight: 500; font-size: 0.9em; }\n");
+        css.append(".filter-stats { display: flex; justify-content: space-between; align-items: center; padding: 15px 0 0; border-top: 2px solid #f1f5f9; margin-top: 20px; font-weight: 600; }\n");
+        css.append("#showingCount { color: #2b6cb0; }\n");
+        css.append("#totalCount { color: #718096; }\n");
+
+        // 概览样式
+        css.append(".comparison-overview { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 40px; background: linear-gradient(135deg, #4299e1 0%, #667eea 100%); color: white; padding: 30px; border-radius: 16px; box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3); }\n");
+        css.append(".db-info { background: rgba(255,255,255,0.15); padding: 25px; border-radius: 12px; backdrop-filter: blur(15px); border: 1px solid rgba(255,255,255,0.2); transition: transform 0.3s ease; }\n");
+        css.append(".db-info:hover { transform: translateY(-3px); }\n");
+        css.append(".db-info h3 { margin: 0 0 20px 0; font-size: 1.4em; font-weight: 600; opacity: 0.95; }\n");
+        css.append(".db-detail { font-size: 1.05em; margin: 10px 0; display: flex; align-items: center; }\n");
+        css.append(".db-detail strong { min-width: 80px; margin-right: 10px; }\n");
+
+        // 统计样式
+        css.append(".stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 25px; margin: 40px 0; }\n");
+        css.append(".stat-card { background: #ffffff; border: 2px solid #e2e8f0; border-radius: 12px; padding: 25px; text-align: center; transition: all 0.3s ease; position: relative; overflow: hidden; }\n");
+        css.append(".stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: #667eea; }\n");
+        css.append(".stat-card:hover { transform: translateY(-5px); box-shadow: 0 12px 35px rgba(0,0,0,0.15); border-color: #667eea; }\n");
+        css.append(".stat-number { font-size: 3em; font-weight: 800; margin-bottom: 8px; text-shadow: 1px 1px 2px rgba(0,0,0,0.1); }\n");
+        css.append(".stat-number.critical { color: #e53e3e; }\n");
+        css.append(".stat-number.warning { color: #dd6b20; }\n");
+        css.append(".stat-number.info { color: #3182ce; }\n");
+        css.append(".stat-label { color: #4a5568; font-size: 0.95em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }\n");
+
+        // 数据库区域样式
+        css.append(".database-section { margin: 50px 0; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 25px rgba(0,0,0,0.08); transition: all 0.3s ease; }\n");
+        css.append(".database-section:hover { box-shadow: 0 12px 40px rgba(0,0,0,0.12); }\n");
+        css.append(".database-header { background: #f8fafc; padding: 25px 35px; border-bottom: 2px solid #e2e8f0; position: relative; }\n");
+        css.append(".database-header::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: #667eea; }\n");
+        css.append(".database-title { font-size: 1.5em; font-weight: 700; color: #1a202c; margin: 0; display: flex; align-items: center; }\n");
+        css.append(".database-title::before { content: '🎯'; margin-right: 12px; font-size: 1.2em; }\n");
+
+        // 表格样式
+        css.append(".differences-table { width: 100%; border-collapse: collapse; margin: 0; background: white; table-layout: fixed; }\n");
+        css.append(".differences-table th { background: #4a5568; color: white; padding: 18px 20px; text-align: left; font-weight: 700; font-size: 0.95em; text-transform: uppercase; letter-spacing: 0.5px; position: sticky; top: 0; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }\n");
+        css.append(".differences-table th:first-child { width: 22%; }\n");
+        css.append(".differences-table th:nth-child(2) { width: 24%; }\n");
+        css.append(".differences-table th:nth-child(3) { width: 14%; }\n");
+        css.append(".differences-table th:nth-child(4) { width: 40%; }\n");
+        css.append(".differences-table td { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; vertical-align: top; transition: background-color 0.2s ease; word-wrap: break-word; overflow-wrap: break-word; }\n");
+        css.append(".differences-table tr:nth-child(even) { background: #fafbfc; }\n");
+        css.append(".differences-table tr:hover { background: #e2e8f0; }\n");
+
+        // 标签样式
+        css.append(".type-badge { padding: 6px 12px; border-radius: 20px; color: white; font-size: 0.8em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; display: inline-block; text-align: center; min-width: 90px; max-width: 100%; box-shadow: 0 2px 8px rgba(0,0,0,0.15); text-shadow: 0 1px 2px rgba(0,0,0,0.2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n");
+        css.append(".type-missing { background: #e53e3e; box-shadow: 0 2px 8px rgba(229, 62, 62, 0.3); }\n");
+        css.append(".type-extra { background: #38a169; box-shadow: 0 2px 8px rgba(56, 161, 105, 0.3); }\n");
+        css.append(".type-different { background: #dd6b20; box-shadow: 0 2px 8px rgba(221, 107, 32, 0.3); }\n");
+        css.append(".table-name { font-weight: 700; color: #2b6cb0; font-size: 1.05em; display: block; word-wrap: break-word; overflow-wrap: break-word; word-break: break-all; line-height: 1.4; }\n");
+        css.append(".table-name::before { content: '📋'; margin-right: 8px; font-size: 1.1em; display: inline-block; }\n");
+        css.append(".item-name { font-family: 'Consolas', 'Monaco', 'Courier New', monospace; background: #f7fafc; padding: 8px 12px; border-radius: 8px; font-size: 0.9em; font-weight: 600; color: #2d3748; border: 1px solid #e2e8f0; display: inline-block; max-width: 100%; word-wrap: break-word; overflow-wrap: break-word; word-break: break-all; line-height: 1.3; }\n");
+        css.append(".description { color: #4a5568; font-size: 0.95em; line-height: 1.5; word-wrap: break-word; overflow-wrap: break-word; word-break: break-word; max-width: 100%; }\n");
+
+        // 成功消息样式
+        css.append(".success-message { text-align: center; background: #38a169; color: white; padding: 50px; border-radius: 16px; margin: 40px 0; box-shadow: 0 8px 25px rgba(56, 161, 105, 0.3); }\n");
+        css.append(".success-message h2 { margin: 0 0 20px 0; font-size: 2.5em; font-weight: 700; }\n");
+        css.append(".success-message p { font-size: 1.2em; opacity: 0.95; }\n");
+        css.append(".no-differences { text-align: center; background: #f0fff4; color: #22543d; padding: 40px; border-radius: 12px; border: 2px solid #9ae6b4; margin: 20px 0; }\n");
+        css.append(".no-data-message { text-align: center; padding: 40px; color: #718096; font-style: italic; background: #f8fafc; margin: 20px; border-radius: 8px; }\n");
+
+        // 响应式设计
+        css.append("@media (max-width: 1200px) { .container { padding: 30px; } .differences-table th:first-child { width: 22%; } .differences-table th:nth-child(2) { width: 24%; } .differences-table th:nth-child(3) { width: 14%; } .differences-table th:nth-child(4) { width: 40%; } .filter-controls { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); } }\n");
+        css.append("@media (max-width: 768px) { body { padding: 10px; } .container { padding: 20px; } h1 { font-size: 2.2em; } .comparison-overview { grid-template-columns: 1fr; gap: 20px; } .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 15px; } .stat-card { padding: 20px; } .stat-number { font-size: 2.2em; } .filter-header { flex-direction: column; gap: 15px; align-items: flex-start; } .filter-actions { width: 100%; justify-content: space-between; } .filter-controls { grid-template-columns: 1fr; gap: 10px; } .filter-checkbox { padding: 10px 12px; } .filter-stats { flex-direction: column; gap: 10px; align-items: flex-start; } .differences-table { font-size: 0.85em; } .differences-table th, .differences-table td { padding: 12px 10px; } .differences-table th:first-child { width: 20%; } .differences-table th:nth-child(2) { width: 26%; } .differences-table th:nth-child(3) { width: 14%; } .differences-table th:nth-child(4) { width: 40%; } .type-badge { font-size: 0.75em; padding: 6px 12px; min-width: 100px; } }\n");
+        css.append("@media (max-width: 480px) { .stats-grid { grid-template-columns: 1fr; } .differences-table { font-size: 0.8em; } .database-title { font-size: 1.3em; } .filter-actions { flex-direction: column; gap: 8px; } .filter-btn { padding: 10px 16px; } }\n");
+
+        return css.toString();
+    }
+
+    /**
+     * 生成JavaScript功能
+     */
+    private String generateJavaScript() {
+        return "<script>" +
+                "document.addEventListener('DOMContentLoaded', function() {" +
+                "    const checkboxes = document.querySelectorAll('.filter-checkbox input[type=\"checkbox\"]');" +
+                "    const selectAllBtn = document.getElementById('selectAll');" +
+                "    const selectNoneBtn = document.getElementById('selectNone');" +
+                "    const resetBtn = document.getElementById('resetFilter');" +
+                "    const showingCount = document.getElementById('showingCount');" +
+                "" +
+                "    function filterRows() {" +
+                "        const checkedTypes = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);" +
+                "        const allRows = document.querySelectorAll('.diff-row');" +
+                "        let visibleCount = 0;" +
+                "" +
+                "        allRows.forEach(row => {" +
+                "            const rowType = row.getAttribute('data-type');" +
+                "            if (checkedTypes.includes(rowType)) {" +
+                "                row.style.display = '';" +
+                "                visibleCount++;" +
+                "            } else {" +
+                "                row.style.display = 'none';" +
+                "            }" +
+                "        });" +
+                "" +
+                "        showingCount.textContent = `显示: ${visibleCount} 项差异`;" +
+                "        updateStatCards(checkedTypes);" +
+                "        checkEmptyDatabaseSections();" +
+                "    }" +
+                "" +
+                "    function updateStatCards(checkedTypes) {" +
+                "        const allRows = document.querySelectorAll('.diff-row');" +
+                "        const typeStats = {};" +
+                "        let totalVisible = 0;" +
+                "" +
+                "        allRows.forEach(row => {" +
+                "            const rowType = row.getAttribute('data-type');" +
+                "            if (checkedTypes.includes(rowType)) {" +
+                "                totalVisible++;" +
+                "                const typeDesc = row.querySelector('.type-badge').textContent.trim();" +
+                "                typeStats[typeDesc] = (typeStats[typeDesc] || 0) + 1;" +
+                "            }" +
+                "        });" +
+                "" +
+                "        const totalCard = document.querySelector('.stat-card .stat-number.critical');" +
+                "        if (totalCard) { totalCard.textContent = totalVisible; }" +
+                "" +
+                "        document.querySelectorAll('.stat-card').forEach(card => {" +
+                "            const label = card.querySelector('.stat-label').textContent;" +
+                "            if (typeStats[label] !== undefined) {" +
+                "                card.querySelector('.stat-number').textContent = typeStats[label];" +
+                "            } else if (label !== '总差异数') {" +
+                "                card.querySelector('.stat-number').textContent = '0';" +
+                "            }" +
+                "        });" +
+                "    }" +
+                "" +
+                "    function checkEmptyDatabaseSections() {" +
+                "        document.querySelectorAll('.database-section').forEach(section => {" +
+                "            const visibleRows = section.querySelectorAll('.diff-row[style=\"\"], .diff-row:not([style])');" +
+                "            const table = section.querySelector('.differences-table');" +
+                "            const noDataMsg = section.querySelector('.no-data-message');" +
+                "" +
+                "            if (visibleRows.length === 0 && table) {" +
+                "                if (!noDataMsg) {" +
+                "                    const msg = document.createElement('div');" +
+                "                    msg.className = 'no-data-message';" +
+                "                    msg.innerHTML = '<p style=\"text-align: center; padding: 40px; color: #718096; font-style: italic;\">当前过滤条件下无数据显示</p>';" +
+                "                    table.style.display = 'none';" +
+                "                    section.appendChild(msg);" +
+                "                }" +
+                "            } else {" +
+                "                if (table) table.style.display = '';" +
+                "                if (noDataMsg) noDataMsg.remove();" +
+                "            }" +
+                "        });" +
+                "    }" +
+                "" +
+                "    checkboxes.forEach(checkbox => {" +
+                "        checkbox.addEventListener('change', filterRows);" +
+                "    });" +
+                "" +
+                "    selectAllBtn.addEventListener('click', function() {" +
+                "        checkboxes.forEach(cb => cb.checked = true);" +
+                "        filterRows();" +
+                "    });" +
+                "" +
+                "    selectNoneBtn.addEventListener('click', function() {" +
+                "        checkboxes.forEach(cb => cb.checked = false);" +
+                "        filterRows();" +
+                "    });" +
+                "" +
+                "    resetBtn.addEventListener('click', function() {" +
+                "        checkboxes.forEach(cb => cb.checked = true);" +
+                "        filterRows();" +
+                "    });" +
+                "" +
+                "    filterRows();" +
+                "});" +
+                "</script>";
+    }
+
+    /**
+     * 获取过滤器CSS类
+     */
+    private String getFilterCssClass(String typeKey) {
+        try {
+            SchemaDifference.DifferenceType type = SchemaDifference.DifferenceType.valueOf(typeKey);
+            return switch (type) {
+                case MISSING_TABLE, MISSING_COLUMN, MISSING_INDEX, PRIMARY_KEY_DIFF -> "critical";
+                case COLUMN_DIFF, INDEX_DIFF, FOREIGN_KEY_DIFF -> "warning";
+                default -> "info";
+            };
+        } catch (IllegalArgumentException e) {
+            return "info";
+        }
     }
 
     /**
@@ -403,17 +447,17 @@ public class ReportGeneratorService {
 
         html.append("<div class='comparison-overview'>\n")
                 .append("    <div class='db-info'>\n")
-                .append("        <h3>📊 基准数据库</h3>\n")
+                .append("        <h3>📊 基准数据库信息</h3>\n")
                 .append("        <div class='db-detail'><strong>数据库：</strong>")
                 .append(escapeHtml(firstDiff.getBaseDatabaseDisplayName())).append("</div>\n")
                 .append("        <div class='db-detail'><strong>Schema：</strong>")
                 .append(escapeHtml(firstDiff.getSchemaName())).append("</div>\n")
                 .append("    </div>\n")
                 .append("    <div class='db-info'>\n")
-                .append("        <h3>📈 对比概要</h3>\n")
+                .append("        <h3>📈 分析统计</h3>\n")
                 .append("        <div class='db-detail'><strong>生成时间：</strong>").append(generateTime).append("</div>\n")
                 .append("        <div class='db-detail'><strong>总差异数：</strong>").append(differences.size()).append("</div>\n")
-                .append("        <div class='db-detail'><strong>涉及数据库：</strong>")
+                .append("        <div class='db-detail'><strong>目标库数：</strong>")
                 .append(getDatabaseCount(differences)).append(" 个</div>\n")
                 .append("    </div>\n")
                 .append("</div>\n");
@@ -469,8 +513,13 @@ public class ReportGeneratorService {
 
             html.append("<div class='database-section'>\n");
 
-            // 数据库头部信息
-            generateDatabaseHeader(html, targetDbName, dbDiffs);
+            // 增强的数据库头部信息 - 显示"目标数据库"字样和Schema
+            String schemaName = dbDiffs.isEmpty() ? "N/A" : dbDiffs.get(0).getSchemaName();
+            html.append("<div class='database-header'>\n")
+                    .append("    <div class='database-title'>目标数据库: ").append(escapeHtml(targetDbName))
+                    .append(" <span style='color: #64748b; font-size: 0.85em; font-weight: 500;'>(Schema: ")
+                    .append(escapeHtml(schemaName)).append(")</span></div>\n")
+                    .append("</div>\n");
 
             if (dbDiffs.isEmpty()) {
                 html.append("<div class='no-differences'>\n")
@@ -486,49 +535,16 @@ public class ReportGeneratorService {
     }
 
     /**
-     * 生成数据库头部信息
-     */
-    private void generateDatabaseHeader(StringBuilder html, String targetDbName, List<SchemaDifference> dbDiffs) {
-        // 统计各类型差异
-        Map<String, Long> typeStats = dbDiffs.stream()
-                .collect(java.util.stream.Collectors.groupingBy(
-                        diff -> diff.getType().getDescription(),
-                        java.util.stream.Collectors.counting()
-                ));
-
-        // 获取Schema信息
-        String schemaName = dbDiffs.isEmpty() ? "N/A" : dbDiffs.get(0).getSchemaName();
-
-        html.append("<div class='database-header'>\n")
-                .append("    <div class='database-title'>🎯 目标数据库: ").append(escapeHtml(targetDbName)).append("</div>\n")
-                .append("    <div class='database-stats'>\n")
-                .append("        <div>Schema: <span>").append(escapeHtml(schemaName)).append("</span></div>\n")
-                .append("        <div>总差异: <span>").append(dbDiffs.size()).append("</span></div>\n");
-
-        // 显示主要差异类型统计
-        typeStats.entrySet().stream()
-                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-                .limit(3)
-                .forEach(stat ->
-                        html.append("        <div>").append(stat.getKey()).append(": <span>")
-                                .append(stat.getValue()).append("</span></div>\n")
-                );
-
-        html.append("    </div>\n")
-                .append("</div>\n");
-    }
-
-    /**
-     * 生成差异表格（简化版，去除冗余列）
+     * 生成差异表格 - 优化列宽比例，添加过滤属性
      */
     private void generateDifferencesTable(StringBuilder html, List<SchemaDifference> dbDiffs) {
         html.append("<table class='differences-table'>\n")
                 .append("    <thead>\n")
                 .append("        <tr>\n")
-                .append("            <th style='width: 15%'>表名</th>\n")
-                .append("            <th style='width: 20%'>项目名</th>\n")
-                .append("            <th style='width: 15%'>差异类型</th>\n")
-                .append("            <th style='width: 50%'>详细描述</th>\n")
+                .append("            <th>表名</th>\n")
+                .append("            <th>项目名</th>\n")
+                .append("            <th>差异类型</th>\n")
+                .append("            <th>详细描述</th>\n")
                 .append("        </tr>\n")
                 .append("    </thead>\n")
                 .append("    <tbody>\n");
@@ -550,7 +566,7 @@ public class ReportGeneratorService {
             for (SchemaDifference diff : tableDiffs) {
                 String typeBadgeClass = getTypeBadgeClass(diff.getType());
 
-                html.append("        <tr>\n")
+                html.append("        <tr class='diff-row' data-type='").append(diff.getType().toString()).append("'>\n")
                         .append("            <td><span class='table-name'>")
                         .append(escapeHtml(diff.getTableName())).append("</span></td>\n")
                         .append("            <td><span class='item-name'>")
@@ -607,6 +623,9 @@ public class ReportGeneratorService {
                 .count();
     }
 
+    /**
+     * 获取差异类型对应的CSS类
+     */
     private String getTypeBadgeClass(SchemaDifference.DifferenceType type) {
         return switch (type) {
             case MISSING_TABLE, MISSING_COLUMN, MISSING_INDEX -> "type-missing";
@@ -615,6 +634,9 @@ public class ReportGeneratorService {
         };
     }
 
+    /**
+     * HTML转义处理
+     */
     private String escapeHtml(String text) {
         if (text == null) return "";
         return text.replace("&", "&amp;")
