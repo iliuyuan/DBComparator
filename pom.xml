@@ -27,14 +27,8 @@
         <maven.compiler.target>21</maven.compiler.target>
         <java.version>21</java.version>
 
-        <!-- 依赖版本 -->
+        <!-- 依赖版本 - 修复版本冲突 -->
         <postgresql.version>42.7.7</postgresql.version>
-        <slf4j.version>2.0.9</slf4j.version>
-        <logback.version>1.5.13</logback.version>
-        <jackson.version>2.16.1</jackson.version>
-        <junit.version>5.10.1</junit.version>
-        <mockito.version>5.8.0</mockito.version>
-        <testcontainers.version>1.19.3</testcontainers.version>
         <commons-cli.version>1.6.0</commons-cli.version>
         <commons-csv.version>1.10.0</commons-csv.version>
 
@@ -48,10 +42,23 @@
     </properties>
 
     <dependencies>
-        <!-- Spring Boot Starters -->
+        <!-- Spring Boot Starters - 使用默认版本管理 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
+            <!-- 排除默认日志配置，避免冲突 -->
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-logging</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- 手动添加Logback配置 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-logging</artifactId>
         </dependency>
 
         <!-- PostgreSQL JDBC Driver -->
@@ -61,28 +68,14 @@
             <version>${postgresql.version}</version>
         </dependency>
 
-        <!-- 日志框架 -->
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>${slf4j.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-classic</artifactId>
-            <version>${logback.version}</version>
-        </dependency>
-
-        <!-- JSON处理 -->
+        <!-- JSON处理 - 使用Spring Boot管理的版本 -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-yaml</artifactId>
-            <version>${jackson.version}</version>
         </dependency>
 
         <!-- 命令行参数处理 -->
@@ -103,7 +96,6 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.30</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>

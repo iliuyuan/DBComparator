@@ -46,7 +46,7 @@ public class DbSchemaComparatorApp implements CommandLineRunner {
     // 批处理大小
     private static final int BATCH_SIZE = 10;
     // 输出基目录
-    private static final String BASE_OUTPUT_DIR = "C:\\Users\\HP\\Desktop\\dbexport\\schema_comparisons";
+    private static final String BASE_OUTPUT_DIR = "C:\\Users\\HP\\Desktop\\dbexport";
 
     public static void main(String[] args) {
         SpringApplication.run(DbSchemaComparatorApp.class, args);
